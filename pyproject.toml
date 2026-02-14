@@ -19,7 +19,7 @@ authors = [
 python = ">=3.14,<3.15"
 robotpy = {extras = ["commands2", "phoenix6", "rev", "navx"], version = "^2026.2.1"}
 pycowsay = "^0.0.0.2"
-photonlibpy = "^2025.1.1"
+photonlibpy = "^2026.2.2"
 astar = "^0.99"
 
 [tool.poetry.group.dev.dependencies]
