@@ -182,3 +182,8 @@ __pycache__
 *.xls
 *.xlsx
 *.numbers
+
+# Local Codex artifacts by Hudson Jimenez on 2026-02-19
+skills/
+.codex/
+AGENTS.md

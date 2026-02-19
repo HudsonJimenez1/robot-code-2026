@@ -3,17 +3,19 @@
 import wpilib
 from subsystems import drive
 from commands2 import CommandScheduler
-from wpimath.geometry import Transform2d
-import time
+from commands2 import Command
+from utils.constants import OperatorConstants
 
 
 class Robot(wpilib.TimedRobot):
     def robotInit(self):
-        self.scheduler = CommandScheduler()
+        self.scheduler = CommandScheduler.getInstance()
+        self.driver_controller = wpilib.XboxController(OperatorConstants.DRIVER_XBOX_PORT)
         self.drive = drive.Drive(self.scheduler)
+        self.autonomous_command: Command | None = None
 
     def robotPeriodic(self):
-        pass
+        self.scheduler.run()
 
     def disabledInit(self):
         pass
@@ -25,7 +27,8 @@ class Robot(wpilib.TimedRobot):
         pass
 
     def autonomousInit(self):
-        pass
+        self.autonomous_command = self.drive.get_autonomous_command()
+        self.autonomous_command.schedule()
 
     def autonomousPeriodic(self):
         pass
@@ -34,15 +37,21 @@ class Robot(wpilib.TimedRobot):
         pass
 
     def teleopInit(self):
-        self.start_time = time.time()
+        if self.autonomous_command is not None:
+            self.autonomous_command.cancel()
+            self.autonomous_command = None
 
     def teleopPeriodic(self):
-        if time.time() - self.start_time < 5:
-            drive_input = Transform2d(5, 0, 0)
-        else:
-            drive_input = Transform2d(0, 0, 0)
-
-        self.drive.drive(drive_input, field_oriented=False)
+        # Right stick controls translation; left X controls robot rotation.
+        x_displacement = -self.driver_controller.getRightY()
+        y_displacement = -self.driver_controller.getRightX()
+        rotation = -self.driver_controller.getLeftX()
+        self.drive.drive(
+            x_displacement=x_displacement,
+            y_displacement=y_displacement,
+            rotation=rotation,
+            field_oriented=False,
+        )
 
     def teleopExit(self):
         pass
