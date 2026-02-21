@@ -22,30 +22,56 @@ else:
 
 class Drive:
     def __init__(self, scheduler: CommandScheduler | None = None):
-        if TalonFX is None or DutyCycleOut is None:
-            raise RuntimeError(
-                "Phoenix 6 is required for swerve bring-up. "
-                "Install project dependencies first."
-            ) from _PHOENIX_IMPORT_ERROR
-
         self.scheduler = scheduler
-        self.tuner_drivetrain: object | None = self._try_create_tuner_drivetrain()
+        self._enabled = True
+        self._disable_reason: str | None = None
+        self._disable_reported = False
+        self.tuner_drivetrain: object | None = None
         self._autonomous_factory: Callable[..., Command] | None = (
             self._try_create_tuner_auto_factory()
         )
-
         self.drive_motors: list[TalonFX] = []
         self.steer_motors: list[TalonFX] = []
+
+        if TalonFX is None or DutyCycleOut is None:
+            self._disable(
+                "Phoenix 6 is not available; running with swerve drive disabled."
+            )
+            return
+
+        self.tuner_drivetrain = self._try_create_tuner_drivetrain()
         self._init_hardware()
 
+    def _disable(self, reason: str) -> None:
+        self._enabled = False
+        self._disable_reason = reason
+        if not self._disable_reported:
+            self._disable_reported = True
+            wpilib.reportWarning(reason, False)
+
     def _init_hardware(self) -> None:
+        if TalonFX is None:
+            self._disable(
+                "Phoenix 6 TalonFX class unavailable; swerve drive disabled."
+            )
+            return
+
         for module in DriveConstants.MODULES:
-            self.drive_motors.append(
-                TalonFX(module.drive_motor_id, DriveConstants.CANBUS_NAME)
-            )
-            self.steer_motors.append(
-                TalonFX(module.steer_motor_id, DriveConstants.CANBUS_NAME)
-            )
+            try:
+                self.drive_motors.append(
+                    TalonFX(module.drive_motor_id, DriveConstants.CANBUS_NAME)
+                )
+                self.steer_motors.append(
+                    TalonFX(module.steer_motor_id, DriveConstants.CANBUS_NAME)
+                )
+            except Exception as exc:
+                self.drive_motors.clear()
+                self.steer_motors.clear()
+                self._disable(
+                    f"Failed to initialize swerve hardware on CAN bus "
+                    f"'{DriveConstants.CANBUS_NAME}': {exc}"
+                )
+                return
 
     def _try_create_tuner_drivetrain(self) -> object | None:
         # Tuner-generated projects often place this class in one of these modules.
@@ -67,7 +93,7 @@ class Drive:
             try:
                 return drivetrain_type()
             except Exception as exc:  # pragma: no cover - depends on generated code
-                wpilib.DriverStation.reportWarning(
+                wpilib.reportWarning(
                     f"Found {module_name}.{class_name} but failed to construct it: {exc}",
                     False,
                 )
@@ -106,6 +132,9 @@ class Drive:
         rotation: float,
         field_oriented: bool = False,
     ) -> None:
+        if not self._enabled:
+            return
+
         if self.tuner_drivetrain is not None:
             # If your Tuner drivetrain exposes a drive(...) function, prefer it.
             tuner_drive = getattr(self.tuner_drivetrain, "drive", None)
@@ -115,6 +144,9 @@ class Drive:
                     return
                 except TypeError:
                     pass
+                except Exception as exc:
+                    self._disable(f"Tuner drivetrain drive call failed: {exc}")
+                    return
 
         x = self._apply_deadband(x_displacement, DriveConstants.TRANSLATION_DEADBAND)
         y = self._apply_deadband(y_displacement, DriveConstants.TRANSLATION_DEADBAND)
@@ -131,25 +163,54 @@ class Drive:
             self._clamp(x - y + omega),  # back left
             self._clamp(x + y - omega),  # back right
         )
+        if DutyCycleOut is None:
+            self._disable("Phoenix 6 DutyCycleOut unavailable during drive call.")
+            return
+
         for motor, output in zip(self.drive_motors, drive_outputs):
-            motor.set_control(DutyCycleOut(output))
+            try:
+                motor.set_control(DutyCycleOut(output))
+            except Exception as exc:
+                self._disable(f"Swerve drive output failed: {exc}")
+                return
 
         # Steer motors are initialized and controlled directly for basic validation.
         steer_output = self._clamp(omega)
         for motor in self.steer_motors:
-            motor.set_control(DutyCycleOut(steer_output))
+            try:
+                motor.set_control(DutyCycleOut(steer_output))
+            except Exception as exc:
+                self._disable(f"Swerve steer output failed: {exc}")
+                return
 
     def stop(self) -> None:
+        if DutyCycleOut is None:
+            return
         for motor in self.drive_motors:
-            motor.set_control(DutyCycleOut(0.0))
+            try:
+                motor.set_control(DutyCycleOut(0.0))
+            except Exception as exc:
+                self._disable(f"Swerve stop failed on drive motor: {exc}")
+                return
         for motor in self.steer_motors:
-            motor.set_control(DutyCycleOut(0.0))
+            try:
+                motor.set_control(DutyCycleOut(0.0))
+            except Exception as exc:
+                self._disable(f"Swerve stop failed on steer motor: {exc}")
+                return
 
     def get_autonomous_command(self) -> Command:
+        if not self._enabled:
+            return InstantCommand(lambda: None)
+
         if self.tuner_drivetrain is not None:
             getter = getattr(self.tuner_drivetrain, "get_autonomous_command", None)
             if callable(getter):
-                command = getter()
+                try:
+                    command = getter()
+                except Exception as exc:
+                    self._disable(f"Tuner drivetrain autonomous getter failed: {exc}")
+                    return InstantCommand(lambda: None)
                 if command is not None and hasattr(command, "schedule"):
                     return command
 
@@ -157,12 +218,19 @@ class Drive:
             try:
                 command = self._autonomous_factory()
             except TypeError:
-                command = self._autonomous_factory(self)  # type: ignore[misc]
+                try:
+                    command = self._autonomous_factory(self)  # type: ignore[misc]
+                except Exception as exc:
+                    self._disable(f"Autonomous factory invocation failed: {exc}")
+                    return InstantCommand(lambda: None)
+            except Exception as exc:
+                self._disable(f"Autonomous factory invocation failed: {exc}")
+                return InstantCommand(lambda: None)
 
             if command is not None and hasattr(command, "schedule"):
                 return command
 
-        wpilib.DriverStation.reportWarning(
+        wpilib.reportWarning(
             "No Phoenix 6 Tuner autonomous command source found; using stop command.",
             False,
         )

@@ -33,3 +33,14 @@ class DriveConstants:
 
 class OperatorConstants:
     DRIVER_XBOX_PORT = 0
+
+
+class QuestNavConstants:
+    INPUT_TABLE = "questnav"
+    OUTPUT_TABLE = "AdvantageScope/QuestNav"
+
+    STALE_TIMEOUT_S = 0.25
+
+    POSITION_LEN = 3
+    EULER_LEN = 3
+    QUAT_LEN = 4
