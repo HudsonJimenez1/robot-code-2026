@@ -11,7 +11,9 @@ from utils.constants import OperatorConstants
 class Robot(wpilib.TimedRobot):
     def robotInit(self):
         self.scheduler = CommandScheduler.getInstance()
-        self.driver_controller = wpilib.XboxController(OperatorConstants.DRIVER_XBOX_PORT)
+        self.driver_controller = wpilib.XboxController(
+            OperatorConstants.DRIVER_XBOX_PORT
+        )
         self.drive: drive.Drive | None = None
         self._drive_faulted = False
         try:

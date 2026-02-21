@@ -26,24 +26,38 @@ class QuestNavNtBridge:
 
         self._timestamp_sub = input_table.getDoubleTopic("timestamp").subscribe(0.0)
         self._position_sub = input_table.getDoubleArrayTopic("position").subscribe([])
-        self._quaternion_sub = input_table.getFloatArrayTopic("quaternion").subscribe([])
+        self._quaternion_sub = input_table.getFloatArrayTopic("quaternion").subscribe(
+            []
+        )
         self._euler_sub = input_table.getFloatArrayTopic("eulerAngles").subscribe([])
         self._battery_sub = input_table.getDoubleTopic("batteryPercent").subscribe(0.0)
-        self._tracking_status_sub = input_table.getIntegerTopic("trackingStatus").subscribe(0)
+        self._tracking_status_sub = input_table.getIntegerTopic(
+            "trackingStatus"
+        ).subscribe(0)
         self._version_sub = input_table.getIntegerTopic("version").subscribe(0)
 
         self._pose3d_pub = output_table.getStructTopic("Pose3d", Pose3d).publish()
         self._pose2d_pub = output_table.getStructTopic("Pose2d", Pose2d).publish()
         self._connected_pub = output_table.getBooleanTopic("Connected").publish()
         self._data_age_pub = output_table.getDoubleTopic("DataAgeSec").publish()
-        self._tracking_status_pub = output_table.getIntegerTopic("TrackingStatus").publish()
+        self._tracking_status_pub = output_table.getIntegerTopic(
+            "TrackingStatus"
+        ).publish()
         self._battery_pub = output_table.getDoubleTopic("BatteryPercent").publish()
         self._version_pub = output_table.getIntegerTopic("Version").publish()
-        self._raw_position_pub = output_table.getDoubleArrayTopic("RawPosition").publish()
-        self._raw_euler_pub = output_table.getFloatArrayTopic("RawEulerAngles").publish()
-        self._raw_quaternion_pub = output_table.getFloatArrayTopic("RawQuaternion").publish()
+        self._raw_position_pub = output_table.getDoubleArrayTopic(
+            "RawPosition"
+        ).publish()
+        self._raw_euler_pub = output_table.getFloatArrayTopic(
+            "RawEulerAngles"
+        ).publish()
+        self._raw_quaternion_pub = output_table.getFloatArrayTopic(
+            "RawQuaternion"
+        ).publish()
         self._teleop_active_pub = output_table.getBooleanTopic("TeleopActive").publish()
-        self._last_timestamp_pub = output_table.getDoubleTopic("LastTimestampUs").publish()
+        self._last_timestamp_pub = output_table.getDoubleTopic(
+            "LastTimestampUs"
+        ).publish()
 
         self._connected_pub.set(False)
         self._data_age_pub.set(-1.0)
@@ -121,7 +135,9 @@ class QuestNavNtBridge:
             )
             self._connected_pub.set(False)
 
-    def _to_wpilib_pose(self, position: Sequence[float], euler: Sequence[float]) -> Pose3d:
+    def _to_wpilib_pose(
+        self, position: Sequence[float], euler: Sequence[float]
+    ) -> Pose3d:
         x = float(position[0])
         y = float(position[1])
         z = float(position[2])

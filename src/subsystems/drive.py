@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import importlib
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from commands2 import Command, InstantCommand
 from commands2 import CommandScheduler
@@ -9,14 +9,24 @@ import wpilib
 
 from utils.constants import DriveConstants
 
+if TYPE_CHECKING:
+    from phoenix6.controls import DutyCycleOut as DutyCycleOutType
+    from phoenix6.hardware import TalonFX as TalonFXType
+
+_PHOENIX_IMPORT_ERROR: ModuleNotFoundError | None
+DutyCycleOutImpl: type[DutyCycleOutType] | None
+TalonFXImpl: type[TalonFXType] | None
+
 try:
-    from phoenix6.controls import DutyCycleOut
-    from phoenix6.hardware import TalonFX
+    from phoenix6.controls import DutyCycleOut as _DutyCycleOut
+    from phoenix6.hardware import TalonFX as _TalonFX
 except ModuleNotFoundError as exc:  # pragma: no cover - depends on local install
-    DutyCycleOut = None  # type: ignore[assignment]
-    TalonFX = None  # type: ignore[assignment]
+    DutyCycleOutImpl = None
+    TalonFXImpl = None
     _PHOENIX_IMPORT_ERROR = exc
 else:
+    DutyCycleOutImpl = _DutyCycleOut
+    TalonFXImpl = _TalonFX
     _PHOENIX_IMPORT_ERROR = None
 
 
@@ -30,10 +40,10 @@ class Drive:
         self._autonomous_factory: Callable[..., Command] | None = (
             self._try_create_tuner_auto_factory()
         )
-        self.drive_motors: list[TalonFX] = []
-        self.steer_motors: list[TalonFX] = []
+        self.drive_motors: list[TalonFXType] = []
+        self.steer_motors: list[TalonFXType] = []
 
-        if TalonFX is None or DutyCycleOut is None:
+        if TalonFXImpl is None or DutyCycleOutImpl is None:
             self._disable(
                 "Phoenix 6 is not available; running with swerve drive disabled."
             )
@@ -50,19 +60,17 @@ class Drive:
             wpilib.reportWarning(reason, False)
 
     def _init_hardware(self) -> None:
-        if TalonFX is None:
-            self._disable(
-                "Phoenix 6 TalonFX class unavailable; swerve drive disabled."
-            )
+        if TalonFXImpl is None:
+            self._disable("Phoenix 6 TalonFX class unavailable; swerve drive disabled.")
             return
 
         for module in DriveConstants.MODULES:
             try:
                 self.drive_motors.append(
-                    TalonFX(module.drive_motor_id, DriveConstants.CANBUS_NAME)
+                    TalonFXImpl(module.drive_motor_id, DriveConstants.CANBUS_NAME)
                 )
                 self.steer_motors.append(
-                    TalonFX(module.steer_motor_id, DriveConstants.CANBUS_NAME)
+                    TalonFXImpl(module.steer_motor_id, DriveConstants.CANBUS_NAME)
                 )
             except Exception as exc:
                 self.drive_motors.clear()
@@ -140,7 +148,9 @@ class Drive:
             tuner_drive = getattr(self.tuner_drivetrain, "drive", None)
             if callable(tuner_drive):
                 try:
-                    tuner_drive(x_displacement, y_displacement, rotation, field_oriented)
+                    tuner_drive(
+                        x_displacement, y_displacement, rotation, field_oriented
+                    )
                     return
                 except TypeError:
                     pass
@@ -163,13 +173,13 @@ class Drive:
             self._clamp(x - y + omega),  # back left
             self._clamp(x + y - omega),  # back right
         )
-        if DutyCycleOut is None:
+        if DutyCycleOutImpl is None:
             self._disable("Phoenix 6 DutyCycleOut unavailable during drive call.")
             return
 
         for motor, output in zip(self.drive_motors, drive_outputs):
             try:
-                motor.set_control(DutyCycleOut(output))
+                motor.set_control(DutyCycleOutImpl(output))
             except Exception as exc:
                 self._disable(f"Swerve drive output failed: {exc}")
                 return
@@ -178,23 +188,23 @@ class Drive:
         steer_output = self._clamp(omega)
         for motor in self.steer_motors:
             try:
-                motor.set_control(DutyCycleOut(steer_output))
+                motor.set_control(DutyCycleOutImpl(steer_output))
             except Exception as exc:
                 self._disable(f"Swerve steer output failed: {exc}")
                 return
 
     def stop(self) -> None:
-        if DutyCycleOut is None:
+        if DutyCycleOutImpl is None:
             return
         for motor in self.drive_motors:
             try:
-                motor.set_control(DutyCycleOut(0.0))
+                motor.set_control(DutyCycleOutImpl(0.0))
             except Exception as exc:
                 self._disable(f"Swerve stop failed on drive motor: {exc}")
                 return
         for motor in self.steer_motors:
             try:
-                motor.set_control(DutyCycleOut(0.0))
+                motor.set_control(DutyCycleOutImpl(0.0))
             except Exception as exc:
                 self._disable(f"Swerve stop failed on steer motor: {exc}")
                 return
